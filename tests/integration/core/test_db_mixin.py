@@ -22,15 +22,15 @@ def test_copyfy_class():
 def test_copyfydict():
     d = {"star": "trek", "quatloos": 200}
     assert str(base.CopyfyDict(d)) == json.dumps(d)
-    assert str(base.CopyfyDict({})) == "{}"
+    assert str(base.CopyfyDict({})) == "{}"  # noqa: P103
     assert str(base.CopyfyDict(None)) == base.DEFAULT_NULL
 
 
 def test_copyfylisttuple():
     assert str(base.CopyfyListTuple(list("asdf"))) == "{a,s,d,f}"
-    assert str(base.CopyfyListTuple([])) == "{}"
+    assert str(base.CopyfyListTuple([])) == "{}"  # noqa: P103
     assert str(base.CopyfyListTuple(None)) == base.DEFAULT_NULL
-    assert str(base.CopyfyListTuple([[1,2],[3,4]])) == "{{1,2},{3,4}}"
+    assert str(base.CopyfyListTuple([[1, 2], [3, 4]])) == "{{1,2},{3,4}}"
 
 
 def test_adapt_copy_types():
@@ -40,7 +40,7 @@ def test_adapt_copy_types():
         None,
         {"feels": "meh"},
         datetime.datetime.now(tz=datetime.timezone.utc),
-        [1,2,3,4],
+        [1, 2, 3, 4],
     ]
     mvals = base.adapt_copy_types(vals)
     assert type(mvals) == list
@@ -64,7 +64,7 @@ def test_copyfy_values(db):
         None,
         {"feels": "meh"},
         datetime.datetime.now(tz=datetime.timezone.utc),
-        [1,2,3,4],
+        [1, 2, 3, 4],
     ]
     mvals = base.copyfy_values(vals)
     assert isinstance(mvals, str)
@@ -101,6 +101,7 @@ create table eek (
         class Meta:
             app_label = "core"
             db_table = "eek"
+
         label = models.TextField(null=False)
         data = models.JSONField()
         lista = ArrayField(models.IntegerField())
@@ -118,7 +119,7 @@ create table eek (
             [
                 "label-2",
                 None,
-                [1,2,3,4],
+                [1, 2, 3, 4],
                 datetime.datetime.now(tz=datetime.timezone.utc),
             ],
         ]
@@ -173,12 +174,14 @@ create table eek (
             """
         )
 
-    class Eek(models.Model):
+    class EekWithSep(models.Model):
         class Meta:
+            app_label = "core"
             db_table = "eek"
+
         label = models.TextField(null=False)
         data = models.JSONField()
-        lista = ArrayField(models.IntegerField)
+        lista = ArrayField(models.IntegerField())
         created_ts = models.DateTimeField()
 
     try:
@@ -193,26 +196,21 @@ create table eek (
             [
                 "label-2",
                 None,
-                [1,2,3,4],
+                [1, 2, 3, 4],
                 datetime.datetime.now(tz=datetime.timezone.utc),
             ],
         ]
 
         copy_file = StringIO()
         for val in vals:
-            print(base.copyfy_values(val, sep="|"), file=copy_file)  # noqa:T201
+            copy_rec = base.copyfy_values(val, sep="|")
+            print(copy_rec, file=copy_file)  # noqa:T201
         copy_file.seek(0)
 
-        rc = base.copy_to_table(
-            db,
-            "eek",
-            cols,
-            copy_file,
-            sep="|"
-        )
+        rc = base.copy_to_table(db, "eek", cols, copy_file, sep="|")
         assert rc
 
-        res = list(Eek.objects.values_list())
+        res = list(EekWithSep.objects.values_list())
         assert len(res) == 2
         for i, rec in enumerate(res):
             val = vals[i]

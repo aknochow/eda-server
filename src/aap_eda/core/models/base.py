@@ -13,25 +13,27 @@
 #  limitations under the License.
 
 import json
-from typing import Any, List, Optional, TextIO, Tuple, Union
+from typing import Any, List, TextIO, Tuple, Union
 
 from django.contrib.postgres.fields import ArrayField
 from django.db import ConnectionProxy, models
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.models import JSONField
 
-
 DEFAULT_SEP = "\t"
 DEFAULT_NULL = "\\N"
 
 
 class Copyfy:
-    TYPE_LOCK = None
+    ALLOWED_TYPES = None
 
     def __init__(self, wrapped: Any, null: str = DEFAULT_NULL):
-        if self.TYPE_LOCK is not None and not isinstance(wrapped, self.TYPE_LOCK):
+        if self.ALLOWED_TYPES is not None and not isinstance(
+            wrapped, self.ALLOWED_TYPES
+        ):
+            allowed_types = ", ".join(self.ALLOWED_TYPES)
             raise TypeError(
-                f"wrapped must be one of these instances: {', '.join(self.TYPE_LOCK)}"
+                f"wrapped must be one of these instances: {allowed_types}"
             )
         self.wrapped = wrapped
 
@@ -46,7 +48,7 @@ class Copyfy:
 
 
 class CopyfyDict(Copyfy):
-    TYPE_LOCK = (dict, type(None))
+    ALLOWED_TYPES = (dict, type(None))
 
     def stringify(self, wrapped: Any):
         if self.wrapped is None:
@@ -54,13 +56,13 @@ class CopyfyDict(Copyfy):
 
         out = json.dumps(self.wrapped)
         if len(out) == 0:
-            out = "{}"
+            out = "{}"  # noqa: P103
 
         return out
 
 
 class CopyfyListTuple(Copyfy):
-    TYPE_LOCK = (list, tuple, type(None))
+    ALLOWED_TYPES = (list, tuple, type(None))
 
     def stringify(self, wrapped: Union[List, Tuple]) -> str:
         if self.wrapped is None:
@@ -108,7 +110,7 @@ def copyfy_values(
     if not values:
         return ""
 
-    return DEFAULT_SEP.join(str(v) for v in adapt_copy_types(values))
+    return sep.join(str(v) for v in adapt_copy_types(values))
 
 
 def copy_to_table(
@@ -121,7 +123,7 @@ def copy_to_table(
 ) -> bool:
     """Read data from a file-like object and write to DB table using COPY."""
     with conn.cursor() as cur:
-        res = cur.cursor.copy_from(
+        cur.cursor.copy_from(
             data,
             db_table,
             sep=sep,
@@ -161,7 +163,7 @@ class CopyfyMixin:
 
         return res
 
-    def mogrify(
+    def copyfy(
         self,
         *,
         sep: str = DEFAULT_SEP,
@@ -171,7 +173,7 @@ class CopyfyMixin:
             fields = self.get_column_names()
 
         vals = self.get_column_values(fields)
-        return mogrify_values(vals, sep=sep)
+        return copyfy_values(vals, sep=sep)
 
 
 OIDField = models.IntegerField
