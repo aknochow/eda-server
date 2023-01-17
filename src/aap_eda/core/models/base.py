@@ -25,35 +25,35 @@ DEFAULT_NULL = "\\N"
 
 
 class Copyfy:
-    ALLOWED_TYPES = None
+    ALLOWED_TYPES = ()
 
     def __init__(self, wrapped: Any):
-        if self.ALLOWED_TYPES is not None and not isinstance(
-            wrapped, self.ALLOWED_TYPES
+        if (
+            wrapped is not None
+            and len(self.ALLOWED_TYPES) > 0
+            and not isinstance(wrapped, self.ALLOWED_TYPES)
         ):
             allowed_types = ", ".join(self.ALLOWED_TYPES)
             raise TypeError(
                 f"wrapped must be one of these instances: {allowed_types}"
             )
+
         self.wrapped = wrapped
 
     def __str__(self):
-        return self.stringify(self.wrapped)
-
-    def stringify(self, wrapped: Any):
-        if wrapped is None:
+        if self.wrapped is None:
             return DEFAULT_NULL
 
+        return self.stringify(self.wrapped)
+
+    def stringify(self, wrapped: Any) -> str:
         return str(wrapped)
 
 
 class CopyfyDict(Copyfy):
-    ALLOWED_TYPES = (dict, type(None))
+    ALLOWED_TYPES = (dict,)
 
-    def stringify(self, wrapped: Any):
-        if self.wrapped is None:
-            return DEFAULT_NULL
-
+    def stringify(self, wrapped: Any) -> str:
         out = json.dumps(self.wrapped)
         if len(out) == 0:
             out = "{}"  # noqa: P103
@@ -62,12 +62,9 @@ class CopyfyDict(Copyfy):
 
 
 class CopyfyListTuple(Copyfy):
-    ALLOWED_TYPES = (list, tuple, type(None))
+    ALLOWED_TYPES = (list, tuple)
 
     def stringify(self, wrapped: Union[List, Tuple]) -> str:
-        if self.wrapped is None:
-            return DEFAULT_NULL
-
         out = []
 
         for val in wrapped:
@@ -83,22 +80,17 @@ class CopyfyListTuple(Copyfy):
         return f"{{{','.join(out)}}}"
 
 
+ADAPT_COPY_MAP = {
+    dict: CopyfyDict,
+    list: CopyfyListTuple,
+    tuple: CopyfyListTuple,
+}
+
+
 def adapt_copy_types(values: Union[List, Tuple]) -> Union[List, Tuple]:
-    out = [
-        CopyfyDict(val)
-        if isinstance(val, dict)
-        else CopyfyListTuple(val)
-        if isinstance(val, (list, tuple))
-        else Copyfy(val)
-        if val is None
-        else val
-        for val in values
-    ]
-
-    if isinstance(values, tuple):
-        return tuple(out)
-
-    return out
+    return type(values)(
+        ADAPT_COPY_MAP.get(type(val), Copyfy)(val) for val in values
+    )
 
 
 def copyfy_values(
@@ -120,7 +112,7 @@ def copy_to_table(
     data: TextIO,
     *,
     sep: str = DEFAULT_SEP,
-) -> bool:
+) -> None:
     """Read data from a file-like object and write to DB table using COPY."""
     with conn.cursor() as cur:
         cur.cursor.copy_from(
@@ -130,8 +122,6 @@ def copy_to_table(
             null=DEFAULT_NULL,
             columns=columns,
         )
-
-    return True
 
 
 class CopyfyMixin:
