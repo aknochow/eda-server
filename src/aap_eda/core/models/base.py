@@ -27,7 +27,7 @@ DEFAULT_NULL = "\\N"
 class Copyfy:
     ALLOWED_TYPES = None
 
-    def __init__(self, wrapped: Any, null: str = DEFAULT_NULL):
+    def __init__(self, wrapped: Any):
         if self.ALLOWED_TYPES is not None and not isinstance(
             wrapped, self.ALLOWED_TYPES
         ):
