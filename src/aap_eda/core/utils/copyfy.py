@@ -93,10 +93,8 @@ ADAPT_COPY_MAP = {
 }
 
 
-def adapt_copy_types(values: Union[List, Tuple]) -> Union[List, Tuple]:
-    return type(values)(
-        ADAPT_COPY_MAP.get(type(val), Copyfy)(val) for val in values
-    )
+def adapt_copy_types(values: Iterable[Any]) -> List[Any]:
+    return [ADAPT_COPY_MAP.get(type(val), Copyfy)(val) for val in values]
 
 
 def copyfy_values(

@@ -4,61 +4,11 @@ from io import StringIO
 
 import pytest
 from django.contrib.postgres.fields import ArrayField
-from django.db import connection, models
-from psycopg2 import DatabaseError, DataError, connect as pg_connect
+from django.db import connection, models, transaction
+from psycopg2 import DatabaseError, DataError
 
 from aap_eda.core.models import Project
 from aap_eda.core.utils import copyfy
-
-
-class PgCursorWrapper:
-    def __init__(self, cur):
-        self.cursor = cur
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        self.cursor.close()
-
-    def execute(self, sql, params=None):
-        self.cursor.execute(sql, params)
-
-
-class PgConnectionWrapper:
-    def __init__(self, dsn):
-        self.connection = pg_connect(dsn)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        self.connection.close()
-
-    def cursor(self):
-        return PgCursorWrapper(self.connection.cursor())
-
-    def commit(self):
-        self.connection.commit()
-
-    def rollback(self):
-        self.connection.rollback()
-
-
-def get_wrapped_connection():
-    """Get a separate connection to tests exceptions."""
-    settings = connection.settings_dict
-    db_url = (
-        "postgresql://{user}:{password}@{host}:{port}/{name}?{query}"
-    ).format(
-        user=settings["USER"],
-        password=settings["PASSWORD"],
-        host=settings["HOST"],
-        port=settings["PORT"],
-        name=settings["NAME"],
-        query="sslmode=prefer&application_name=eda_test_exc",
-    )
-    return PgConnectionWrapper(db_url)
 
 
 def test_copyfy_class():
@@ -100,9 +50,6 @@ def test_adapt_copy_types():
     assert type(mvals[3]) == copyfy.CopyfyDict
     assert type(mvals[4]) == copyfy.Copyfy
     assert type(mvals[5]) == copyfy.CopyfyListTuple
-
-    mvals = copyfy.adapt_copy_types(tuple(vals))
-    assert type(mvals) == tuple
 
 
 def test_copyfy_values(db):
@@ -240,114 +187,68 @@ def test_copy_to_table_with_sep(eek_model):
 
 
 @pytest.mark.django_db
-def test_copy_to_table_file_error():
-    with get_wrapped_connection() as db:
-        with db.cursor() as cur:
-            cur.execute(
-                """
-create table eek (
-    id serial primary key,
-    label text not null,
-    data jsonb,
-    lista int[],
-    created_ts timestamptz
-)
-;
-                """
-            )
+def test_copy_to_table_file_error(eek_table):
+    cols = ["label", "data", "created_ts"]
+    vals = [
+        [
+            "label-1",
+            {"type": "rulebook", "data": {"ruleset": "ruleset-1"}},
+            None,
+            datetime.datetime.now(tz=datetime.timezone.utc),
+        ],
+        [
+            "label-2",
+            None,
+            [1, 2, 3, 4],
+            datetime.datetime.now(tz=datetime.timezone.utc),
+        ],
+    ]
 
-        cols = ["label", "data", "created_ts"]
-        vals = [
-            [
-                "label-1",
-                {"type": "rulebook", "data": {"ruleset": "ruleset-1"}},
-                None,
-                datetime.datetime.now(tz=datetime.timezone.utc),
-            ],
-            [
-                "label-2",
-                None,
-                [1, 2, 3, 4],
-                datetime.datetime.now(tz=datetime.timezone.utc),
-            ],
-        ]
+    copy_file = StringIO()
+    for val in vals:
+        print(copyfy.copyfy_values(val), file=copy_file)  # noqa:T201
+    copy_file.seek(0)
 
-        copy_file = StringIO()
-        for val in vals:
-            print(copyfy.copyfy_values(val), file=copy_file)  # noqa:T201
-        copy_file.seek(0)
-
-        with pytest.raises(DataError):
+    with pytest.raises(DataError):
+        with transaction.atomic():
             copyfy.copy_to_table(
-                db,
+                connection,
                 "eek",
                 cols,
                 copy_file,
-            )
-
-        db.rollback()
-
-        with db.cursor() as cur:
-            cur.execute(
-                """
-drop table if exists eek;
-                """
             )
 
 
 @pytest.mark.django_db
-def test_copy_to_table_integrity_error():
-    with get_wrapped_connection() as db:
-        with db.cursor() as cur:
-            cur.execute(
-                """
-create table eek (
-    id serial primary key,
-    label text not null,
-    data jsonb,
-    lista int[],
-    created_ts timestamptz
-)
-;
-            """
-            )
+def test_copy_to_table_integrity_error(eek_table):
+    cols = ["label", "data", "lista", "created_ts"]
+    vals = [
+        [
+            None,
+            {"type": "rulebook", "data": {"ruleset": "ruleset-1"}},
+            None,
+            datetime.datetime.now(tz=datetime.timezone.utc),
+        ],
+        [
+            "label-2",
+            None,
+            [1, 2, 3, 4],
+            datetime.datetime.now(tz=datetime.timezone.utc),
+        ],
+    ]
 
-        cols = ["label", "data", "lista", "created_ts"]
-        vals = [
-            [
-                None,
-                {"type": "rulebook", "data": {"ruleset": "ruleset-1"}},
-                None,
-                datetime.datetime.now(tz=datetime.timezone.utc),
-            ],
-            [
-                "label-2",
-                None,
-                [1, 2, 3, 4],
-                datetime.datetime.now(tz=datetime.timezone.utc),
-            ],
-        ]
+    copy_file = StringIO()
+    for val in vals:
+        print(copyfy.copyfy_values(val), file=copy_file)  # noqa:T201
+    copy_file.seek(0)
 
-        copy_file = StringIO()
-        for val in vals:
-            print(copyfy.copyfy_values(val), file=copy_file)  # noqa:T201
-        copy_file.seek(0)
-
-        with pytest.raises(DatabaseError):
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
             copyfy.copy_to_table(
-                db,
+                connection,
                 "eek",
                 cols,
                 copy_file,
-            )
-
-        db.rollback()
-
-        with db.cursor() as cur:
-            cur.execute(
-                """
-drop table if exists eek;
-                """
             )
 
 
