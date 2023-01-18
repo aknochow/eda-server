@@ -5,7 +5,7 @@ from io import StringIO
 import pytest
 from django.contrib.postgres.fields import ArrayField
 from django.db import connection, models, transaction
-from psycopg2 import DatabaseError, DataError
+from psycopg2 import errors as pg_errors
 
 from aap_eda.core.models import Project
 from aap_eda.core.utils import copyfy
@@ -113,8 +113,7 @@ def eek_model(eek_table):
     return Eek
 
 
-@pytest.mark.django_db
-def test_copy_to_table(eek_model):
+def copy_to_table_data():
     cols = ["label", "data", "lista", "created_ts"]
     vals = [
         [
@@ -130,15 +129,10 @@ def test_copy_to_table(eek_model):
             datetime.datetime.now(tz=datetime.timezone.utc),
         ],
     ]
+    return cols, vals
 
-    copy_file = StringIO()
-    for val in vals:
-        print(copyfy.copyfy_values(val), file=copy_file)  # noqa:T201
-    copy_file.seek(0)
 
-    copyfy.copy_to_table(connection, "eek", cols, copy_file)
-
-    res = list(eek_model.objects.values_list())
+def verify_copy_to_table(res, vals):
     assert len(res) == 2
     for i, rec in enumerate(res):
         val = vals[i]
@@ -150,22 +144,23 @@ def test_copy_to_table(eek_model):
 
 
 @pytest.mark.django_db
+def test_copy_to_table(eek_model):
+    cols, vals = copy_to_table_data()
+
+    copy_file = StringIO()
+    for val in vals:
+        print(copyfy.copyfy_values(val), file=copy_file)  # noqa:T201
+    copy_file.seek(0)
+
+    copyfy.copy_to_table(connection, "eek", cols, copy_file)
+
+    res = list(eek_model.objects.values_list())
+    verify_copy_to_table(res, vals)
+
+
+@pytest.mark.django_db
 def test_copy_to_table_with_sep(eek_model):
-    cols = ["label", "data", "lista", "created_ts"]
-    vals = [
-        [
-            "label-1",
-            {"type": "rulebook", "data": {"ruleset": "ruleset-1"}},
-            None,
-            datetime.datetime.now(tz=datetime.timezone.utc),
-        ],
-        [
-            "label-2",
-            None,
-            [1, 2, 3, 4],
-            datetime.datetime.now(tz=datetime.timezone.utc),
-        ],
-    ]
+    cols, vals = copy_to_table_data()
 
     copy_file = StringIO()
     for val in vals:
@@ -176,14 +171,7 @@ def test_copy_to_table_with_sep(eek_model):
     copyfy.copy_to_table(connection, "eek", cols, copy_file, sep="|")
 
     res = list(eek_model.objects.values_list())
-    assert len(res) == 2
-    for i, rec in enumerate(res):
-        val = vals[i]
-        for j in range(len(rec)):
-            if j == 0:
-                assert isinstance(rec[j], int)
-            else:
-                assert val[j - 1] == rec[j]
+    verify_copy_to_table(res, vals)
 
 
 @pytest.mark.django_db
@@ -209,7 +197,7 @@ def test_copy_to_table_file_error(eek_table):
         print(copyfy.copyfy_values(val), file=copy_file)  # noqa:T201
     copy_file.seek(0)
 
-    with pytest.raises(DataError):
+    with pytest.raises(pg_errors.BadCopyFileFormat):
         with transaction.atomic():
             copyfy.copy_to_table(
                 connection,
@@ -242,7 +230,7 @@ def test_copy_to_table_integrity_error(eek_table):
         print(copyfy.copyfy_values(val), file=copy_file)  # noqa:T201
     copy_file.seek(0)
 
-    with pytest.raises(DatabaseError):
+    with pytest.raises(pg_errors.NotNullViolation):
         with transaction.atomic():
             copyfy.copy_to_table(
                 connection,
