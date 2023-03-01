@@ -12,9 +12,13 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+from .log_reader import ActivationExecution, consume_log, get_consumer
 from .project import import_project, sync_project
 
 __all__ = (
     "import_project",
     "sync_project",
+    "ActivationExecution",
+    "get_consumer",
+    "consume_log",
 )

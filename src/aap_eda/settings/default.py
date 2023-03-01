@@ -51,6 +51,9 @@ Redis queue settings:
 * MQ_PORT - Redis queue port (default: 6379)
 * MQ_DB - Redis queue database (default: 0)
 """
+from dataclasses import dataclass
+from enum import Enum
+
 import dynaconf
 
 settings = dynaconf.Dynaconf(envvar_prefix="EDA")
@@ -279,3 +282,31 @@ LOGGING = {
         },
     },
 }
+
+# ---------------------------------------------------------
+# ANSIBLE RUNNER SETTINGS
+# ---------------------------------------------------------
+
+LOCAL_RUNNER_DEPLOY_HOST = "127.0.0.1"
+LOCAL_RUNNER_DEPLOY_PORT = 8080
+
+
+class AnsibleRunnerDeployment(Enum):
+    LOCAL = "local"
+    DOCKER = "docker"
+    PODMAN = "podman"
+
+
+@dataclass
+class AnsibleRunnerSettings:
+    deployment_type = AnsibleRunnerDeployment(
+        settings.get(
+            "RUNNER_DEPLOYMENT_TYPE", AnsibleRunnerDeployment.LOCAL.value
+        )
+    )
+    deployment_host = settings.get(
+        "RUNNER_DEPLOYMENT_HOST", LOCAL_RUNNER_DEPLOY_HOST
+    )
+    deployment_port = settings.get(
+        "RUNNER_DEPLOYMENT_HOST", LOCAL_RUNNER_DEPLOY_PORT
+    )

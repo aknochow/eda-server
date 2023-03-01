@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from .activation import Activation, ActivationInstance, ActivationInstanceLog
+from .activation import Activation, ActivationInstance, ActivationInstanceEvent
 from .auth import Role, RolePermission, UserRole
 from .inventory import Inventory
 from .job import (
@@ -28,14 +28,14 @@ from .user import User
 
 __all__ = [
     "ActivationInstanceJobInstance",
-    "ActivationInstanceLog",
+    "ActivationInstanceEvent",
     "ActivationInstance",
     "Activation",
     "AuditRule",
     "ExtraVar",
     "Inventory",
-    "JobInstanceEvent",
     "JobInstanceHost",
+    "JobInstanceEvent",
     "JobInstance",
     "Job",
     "Playbook",
