@@ -28,7 +28,6 @@ from aap_eda.settings.default import (
     AnsibleRunnerSettings,
 )
 from aap_eda.tasks import ActivationExecution, consume_log
-from aap_eda.utils.validated_create import validated_create
 
 LOG = logging.getLogger(__name__)
 
@@ -165,11 +164,7 @@ def create_activation_instance_record(
     new_activation_instance: ActivationInstanceSerializer,
 ) -> ActivationInstance:
     """Create the activation record from the serializer data."""
-    act_inst = validated_create(
-        ActivationInstance,
-        new_activation_instance.validated_data(),
-        fetch_related=True,
-    )
+    act_inst = new_activation_instance.create()
     return act_inst
 
 
